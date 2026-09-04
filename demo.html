@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FieldScribe offline-voice - demo</title>
+<style>
+  body{font-family:Lato,system-ui,sans-serif;max-width:640px;margin:2rem auto;padding:0 1rem;color:#333;}
+  h1{font-family:Lora,Georgia,serif;color:#045C64;}
+  textarea{width:100%;min-height:6rem;font-size:1rem;padding:.6rem;border:1px solid #ccc;border-radius:8px;}
+  .note{background:#F0F7F8;border-radius:10px;padding:1rem;font-size:.9rem;line-height:1.5;}
+  code{background:#eef;padding:.1rem .3rem;border-radius:4px;}
+</style>
+</head>
+<body>
+  <h1>🎤 FieldScribe offline-voice — demo</h1>
+
+  <p class="note">
+    This page is a <strong>standalone test harness</strong> for the voice module.
+    It is not FieldScribe, and it is not wired into the app - it just proves the
+    microphone + on-device recognition works, so you can try it on a phone before
+    integrating. <strong>Set <code>MODEL_URL</code> below first</strong> (see
+    <code>OFFLINE_VOICE.md</code>). The first load needs internet to fetch the
+    library and model; after that it runs offline.
+  </p>
+
+  <p>Talk into the field. Tap the mic to start, tap again to stop.</p>
+  <label>Field notes</label>
+  <textarea placeholder="e.g. large female under a mossy log near the stream"></textarea>
+
+  <!-- 1. The Vosk browser library (provides window.Vosk). For a real offline
+       build, download this file and serve it from your own site instead of a CDN. -->
+  <script src="https://cdn.jsdelivr.net/npm/vosk-browser@0.0.8/dist/vosk-browser.js"></script>
+
+  <!-- 2. Point the module at a model. Replace this with a real model archive URL
+       (see the guide). Leaving it as-is will show a friendly "voice unavailable". -->
+  <script>
+    window.FS_VOICE_CONFIG = {
+      enabled: true,
+      // TODO: set this to a vosk-browser-compatible .tar.gz model (see OFFLINE_VOICE.md)
+      modelUrl: 'MODEL_URL_HERE',
+      selector: 'textarea',
+      mode: 'append'
+    };
+  </script>
+
+  <!-- 3. The module itself. -->
+  <script src="voice.js"></script>
+</body>
+</html>
