@@ -12,6 +12,7 @@ repo, lets the app and its add-ons version independently.
 | Folder | What it does | Status |
 |--------|--------------|--------|
 | [`voice/`](voice/) | Offline speech-to-text (dictation) for the free-text fields, using Vosk in the browser. No audio leaves the device. | Prototype - needs on-device testing |
+| [`photo-matcher/`](photo-matcher/) | Links field photos to FieldScribe samples by EXIF timestamp and GPS, after fieldwork. Runs in the browser; no photo is uploaded. | EXIF reader verified; try on real photos |
 
 Each extension has its own README and setup guide inside its folder.
 

@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FieldScribe Photo Matcher</title>
+<style>
+  :root{ --teal:#045C64; --teal-d:#02363c; --lime:#A7C947; --aqua:#4C979F; --bg:#fbfaf6; --surface:#fff; --text:#333; --muted:#6a736f; --border:#dfe3e1; --error:#c0392b; }
+  *{box-sizing:border-box}
+  body{font-family:Lato,system-ui,Arial,sans-serif;max-width:860px;margin:0 auto;padding:1.2rem;background:var(--bg);color:var(--text);line-height:1.5;}
+  h1{font-family:Lora,Georgia,serif;color:var(--teal);margin:.2rem 0;}
+  h2{font-family:Lora,Georgia,serif;color:var(--teal);font-size:1.15rem;margin:.2rem 0;}
+  .sub{color:var(--muted);margin-top:0;}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1rem 1.1rem;margin:1rem 0;}
+  .step-n{display:inline-flex;align-items:center;justify-content:center;width:1.6rem;height:1.6rem;border-radius:50%;background:var(--teal);color:#fff;font-weight:700;margin-right:.5rem;}
+  label.fld{display:block;font-weight:700;margin:.6rem 0 .2rem;}
+  input[type=file]{display:block;margin:.3rem 0;}
+  input[type=number]{width:6rem;padding:.4rem;border:1px solid var(--border);border-radius:8px;}
+  .row{display:flex;gap:1.5rem;flex-wrap:wrap;align-items:flex-end;}
+  button{background:var(--teal);color:#fff;border:none;border-radius:10px;padding:.7rem 1.1rem;font-weight:700;font-size:1rem;cursor:pointer;}
+  button.sec{background:var(--lime);color:var(--teal-d);}
+  button:disabled{opacity:.5;cursor:not-allowed;}
+  .status{color:var(--muted);font-size:.9rem;}
+  table{border-collapse:collapse;width:100%;font-size:.85rem;margin-top:.6rem;}
+  th,td{border-bottom:1px solid var(--border);padding:.4rem .5rem;text-align:left;vertical-align:top;}
+  th{background:var(--teal);color:#fff;position:sticky;top:0;}
+  tr:nth-child(even) td{background:#f0f7f8;}
+  .pill{display:inline-block;padding:.05rem .5rem;border-radius:999px;font-size:.75rem;font-weight:700;}
+  .ok{background:#e4f0d8;color:#3c5a16;}
+  .no{background:#f6dcd9;color:#7a241c;}
+  .muted{color:var(--muted);}
+  .hint{background:#f0f7f8;border-radius:10px;padding:.7rem .9rem;font-size:.88rem;}
+  code{background:#eef;padding:.05rem .3rem;border-radius:4px;}
+  .scroll{max-height:60vh;overflow:auto;border:1px solid var(--border);border-radius:10px;}
+</style>
+</head>
+<body>
+  <h1>🖼️ FieldScribe Photo Matcher</h1>
+  <p class="sub">Links your field photos to FieldScribe samples by the moment each was taken - using the photo's built-in EXIF time (and GPS). Everything runs in your browser; <strong>no photo is uploaded anywhere.</strong></p>
+
+  <div class="card">
+    <h2><span class="step-n">1</span>FieldScribe backup</h2>
+    <p class="muted">In FieldScribe, tap <strong>Back up all data</strong> and load that JSON file here. It carries each sample's ID, time and GPS.</p>
+    <input type="file" id="backup" accept=".json,application/json">
+    <div class="status" id="backup-status"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="step-n">2</span>Your photos</h2>
+    <p class="muted">Select the photos from this collection (ideally taken on the same phone as the records). They are read on your device only.</p>
+    <input type="file" id="photos" accept="image/jpeg,image/*" multiple>
+    <div class="status" id="photos-status"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="step-n">3</span>Matching settings</h2>
+    <div class="row">
+      <div>
+        <label class="fld" for="window">Time window (± minutes)</label>
+        <input type="number" id="window" value="20" min="1" max="720">
+        <div class="status">A photo matches a sample if taken within this many minutes of it.</div>
+      </div>
+      <div>
+        <label class="fld" for="offset">Clock offset (minutes)</label>
+        <input type="number" id="offset" value="0" min="-1440" max="1440">
+        <div class="status">Nudge if photo and record clocks differ (time zone or camera drift).</div>
+      </div>
+      <div>
+        <label class="fld"><input type="checkbox" id="usegps" checked> Use GPS when both have it</label>
+        <div class="status">Prefer the closest sample in space, not just time.</div>
+      </div>
+    </div>
+    <p style="margin-top:1rem;"><button id="run" disabled>Match photos to samples</button></p>
+    <div class="status" id="run-status"></div>
+  </div>
+
+  <div class="card" id="results" style="display:none;">
+    <h2>Results</h2>
+    <div id="summary" class="hint" style="margin-bottom:.6rem;"></div>
+    <p><button class="sec" id="dl">⬇️ Download links (CSV)</button></p>
+    <div class="scroll">
+      <table id="table"><thead><tr>
+        <th>Photo</th><th>Sample ID</th><th>Species / env</th><th>Record time</th><th>Photo time</th><th>Δ min</th><th>Distance</th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+
+  <p class="status">FieldScribe extension · runs client-side · <a href="https://github.com/OlgaVP-PB/FieldScribe-extensions" target="_blank" rel="noopener">source</a></p>
+
+<script>
+/* ---------------- EXIF reader (JPEG) ----------------
+   Reads DateTimeOriginal and GPS lat/lon from a JPEG ArrayBuffer.
+   Minimal, dependency-free. Returns { date: Date|null, lat, lon }. */
+function readExif(buf){
+  const dv = new DataView(buf);
+  if (dv.byteLength < 4 || dv.getUint16(0) !== 0xFFD8) return {date:null,lat:null,lon:null}; // not JPEG
+  let off = 2;
+  // find APP1 (Exif)
+  while (off + 4 <= dv.byteLength){
+    const marker = dv.getUint16(off);
+    if (marker === 0xFFD8){ off += 2; continue; }
+    if ((marker & 0xFF00) !== 0xFF00) break;
+    const size = dv.getUint16(off+2);
+    if (marker === 0xFFE1){
+      // check "Exif\0\0"
+      if (dv.getUint32(off+4) === 0x45786966 && dv.getUint16(off+8) === 0x0000){
+        return parseTiff(dv, off+10);
+      }
+    }
+    if (marker === 0xFFDA) break; // start of scan - no more metadata
+    off += 2 + size;
+  }
+  return {date:null,lat:null,lon:null};
+}
+
+function parseTiff(dv, base){
+  const bo = dv.getUint16(base);
+  const little = (bo === 0x4949);
+  const u16 = (o)=>dv.getUint16(o, little);
+  const u32 = (o)=>dv.getUint32(o, little);
+  if (u16(base+2) !== 0x002A) return {date:null,lat:null,lon:null};
+  const ifd0 = base + u32(base+4);
+
+  function entries(ifdOff){
+    const n = u16(ifdOff); const list = [];
+    for (let i=0;i<n;i++){
+      const e = ifdOff + 2 + i*12;
+      list.push({ tag:u16(e), type:u16(e+2), count:u32(e+4), valOff:e+8 });
+    }
+    return list;
+  }
+  function asciiVal(ent){
+    const len = ent.count; let p = (len<=4)? ent.valOff : base + u32(ent.valOff);
+    let s=''; for (let i=0;i<len;i++){ const c=dv.getUint8(p+i); if(c===0)break; s+=String.fromCharCode(c); }
+    return s;
+  }
+  function rationals(ent, k){
+    const p = base + u32(ent.valOff); const out=[];
+    for (let i=0;i<k;i++){ const num=u32(p+i*8); const den=u32(p+i*8+4); out.push(den? num/den : 0); }
+    return out;
+  }
+
+  let exifIFD=null, gpsIFD=null, dateStr=null;
+  entries(ifd0).forEach(ent=>{
+    if (ent.tag===0x8769) exifIFD = base + u32(ent.valOff);
+    else if (ent.tag===0x8825) gpsIFD = base + u32(ent.valOff);
+    else if (ent.tag===0x0132 && !dateStr) dateStr = asciiVal(ent); // DateTime (fallback)
+  });
+  if (exifIFD!=null){
+    entries(exifIFD).forEach(ent=>{
+      if (ent.tag===0x9003) dateStr = asciiVal(ent);                 // DateTimeOriginal (preferred)
+      else if (ent.tag===0x9004 && !dateStr) dateStr = asciiVal(ent); // DateTimeDigitized
+    });
+  }
+  let lat=null, lon=null;
+  if (gpsIFD!=null){
+    let latRef='N', lonRef='E', latArr=null, lonArr=null;
+    entries(gpsIFD).forEach(ent=>{
+      if (ent.tag===0x0001) latRef = asciiVal(ent) || 'N';
+      else if (ent.tag===0x0002) latArr = rationals(ent,3);
+      else if (ent.tag===0x0003) lonRef = asciiVal(ent) || 'E';
+      else if (ent.tag===0x0004) lonArr = rationals(ent,3);
+    });
+    const dms = a => a? (a[0] + a[1]/60 + a[2]/3600) : null;
+    if (latArr){ lat = dms(latArr); if (/S/i.test(latRef)) lat = -lat; }
+    if (lonArr){ lon = dms(lonArr); if (/W/i.test(lonRef)) lon = -lon; }
+  }
+  let date=null;
+  if (dateStr){
+    // "YYYY:MM:DD HH:MM:SS" -> local Date
+    const m = dateStr.match(/(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+    if (m) date = new Date(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +m[6]);
+  }
+  return {date, lat, lon};
+}
+
+/* ---------------- matching ---------------- */
+let RECORDS=[], PHOTOS=[], MATCHES=[];
+
+document.getElementById('backup').addEventListener('change', e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const data=JSON.parse(r.result);
+      const recs = Array.isArray(data)? data : (data && Array.isArray(data.records)? data.records : null);
+      if(!recs){ setStatus('backup-status','Not a FieldScribe backup file.',true); return; }
+      RECORDS = recs.map(s=>{
+        const id = s.baseId || (s.fields && s.fields['sample_alias']) || s._id || '(no id)';
+        const label = s.scientificName || s.environment || (s.fields && s.fields['scientific_name']) || '';
+        const t = s.timestamp ? new Date(s.timestamp) : null;
+        const lat = (s.latitude!=null)? +s.latitude : null;
+        const lon = (s.longitude!=null)? +s.longitude : null;
+        return {id,label,time:t,lat,lon};
+      }).filter(r=>r.time && !isNaN(r.time));
+      setStatus('backup-status', RECORDS.length+' sample(s) with a timestamp loaded.');
+      maybeEnable();
+    }catch(err){ setStatus('backup-status','Could not read that file.',true); }
+  };
+  r.readAsText(f);
+});
+
+document.getElementById('photos').addEventListener('change', async e=>{
+  const files=[...e.target.files]; if(!files.length) return;
+  setStatus('photos-status','Reading '+files.length+' photo(s)…');
+  PHOTOS=[];
+  for (const f of files){
+    const buf = await f.arrayBuffer();
+    let ex={date:null,lat:null,lon:null};
+    try{ ex=readExif(buf); }catch(err){}
+    PHOTOS.push({name:f.name, date:ex.date, lat:ex.lat, lon:ex.lon});
+  }
+  const withTime = PHOTOS.filter(p=>p.date).length;
+  setStatus('photos-status', files.length+' photo(s) read · '+withTime+' had a usable EXIF time'+(withTime<files.length?' (others can\'t be matched)':'')+'.');
+  maybeEnable();
+});
+
+function maybeEnable(){ document.getElementById('run').disabled = !(RECORDS.length && PHOTOS.length); }
+function setStatus(id,msg,err){ const el=document.getElementById(id); el.textContent=msg; el.style.color=err?'var(--error)':'var(--muted)'; }
+
+function haversine(a,b,c,d){
+  if([a,b,c,d].some(v=>v==null||isNaN(v))) return null;
+  const R=6371000, toR=x=>x*Math.PI/180;
+  const dLat=toR(c-a), dLon=toR(d-b);
+  const s=Math.sin(dLat/2)**2 + Math.cos(toR(a))*Math.cos(toR(c))*Math.sin(dLon/2)**2;
+  return Math.round(2*R*Math.asin(Math.sqrt(s)));
+}
+
+document.getElementById('run').addEventListener('click', ()=>{
+  const win = (+document.getElementById('window').value||20)*60000;
+  const off = (+document.getElementById('offset').value||0)*60000;
+  const useGps = document.getElementById('usegps').checked;
+  MATCHES=[];
+  PHOTOS.forEach(p=>{
+    if(!p.date){ MATCHES.push({photo:p, rec:null, dmin:null, dist:null}); return; }
+    const pt = p.date.getTime()+off;
+    let best=null, bestScore=Infinity, bestDist=null;
+    RECORDS.forEach(rec=>{
+      const dt = Math.abs(rec.time.getTime()-pt);
+      if (dt>win) return;
+      const dist = (useGps)? haversine(p.lat,p.lon,rec.lat,rec.lon) : null;
+      // score: minutes + small distance weight (if available)
+      const score = dt/60000 + (dist!=null? dist/1000 : 0);
+      if (score<bestScore){ bestScore=score; best=rec; bestDist=dist; }
+    });
+    MATCHES.push({photo:p, rec:best, dmin: best? Math.round(Math.abs(best.time.getTime()-pt)/60000) : null, dist: bestDist});
+  });
+  render();
+});
+
+function fmt(d){ if(!d) return ''; const p=n=>String(n).padStart(2,'0'); return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes()); }
+
+function render(){
+  const tb=document.querySelector('#table tbody'); tb.innerHTML='';
+  let matched=0;
+  MATCHES.forEach(m=>{
+    const tr=document.createElement('tr');
+    const ok = !!m.rec;
+    if (ok) matched++;
+    tr.innerHTML =
+      '<td>'+esc(m.photo.name)+'</td>'+
+      '<td>'+(ok? '<span class="pill ok">'+esc(m.rec.id)+'</span>' : '<span class="pill no">no match</span>')+'</td>'+
+      '<td class="muted">'+(ok?esc(m.rec.label):'')+'</td>'+
+      '<td class="muted">'+(ok?fmt(m.rec.time):'')+'</td>'+
+      '<td class="muted">'+(m.photo.date?fmt(m.photo.date):'<span class="no">no EXIF time</span>')+'</td>'+
+      '<td>'+(m.dmin!=null?m.dmin:'')+'</td>'+
+      '<td class="muted">'+(m.dist!=null?m.dist+' m':'')+'</td>';
+    tb.appendChild(tr);
+  });
+  const recsMatched = new Set(MATCHES.filter(m=>m.rec).map(m=>m.rec.id)).size;
+  document.getElementById('summary').innerHTML =
+    '<strong>'+matched+'</strong> of '+MATCHES.length+' photo(s) matched to '+
+    '<strong>'+recsMatched+'</strong> sample(s). '+
+    'Adjust the time window or clock offset if matches look off, then re-run.';
+  document.getElementById('results').style.display='';
+}
+
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function csvCell(s){ s=String(s==null?'':s); return /[",\n]/.test(s)? '"'+s.replace(/"/g,'""')+'"' : s; }
+
+document.getElementById('dl').addEventListener('click', ()=>{
+  const head=['Photo file','Sample ID','Species/env','Record time','Photo time','Time diff (min)','Distance (m)'];
+  const rows=MATCHES.map(m=>[
+    m.photo.name,
+    m.rec? m.rec.id : '',
+    m.rec? m.rec.label : '',
+    m.rec? fmt(m.rec.time) : '',
+    m.photo.date? fmt(m.photo.date) : '',
+    m.dmin!=null? m.dmin : '',
+    m.dist!=null? m.dist : ''
+  ]);
+  const csv=[head,...rows].map(r=>r.map(csvCell).join(',')).join('\n')+'\n';
+  const blob=new Blob([csv],{type:'text/csv'}); const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url;
+  a.download='fieldscribe-photo-links-'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
+  URL.revokeObjectURL(url);
+});
+</script>
+</body>
+</html>

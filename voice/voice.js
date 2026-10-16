@@ -94,7 +94,6 @@
 
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     recognizer = new model.KaldiRecognizer(audioCtx.sampleRate);
-    recognizer.setWords(true);
 
     recognizer.on('result', function (m) {
       if (m && m.result && m.result.text) insertText(field, m.result.text);

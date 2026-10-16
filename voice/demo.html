@@ -30,15 +30,15 @@
 
   <!-- 1. The Vosk browser library (provides window.Vosk). For a real offline
        build, download this file and serve it from your own site instead of a CDN. -->
-  <script src="https://cdn.jsdelivr.net/npm/vosk-browser@0.0.8/dist/vosk-browser.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vosk-browser@0.0.8/dist/vosk.js"></script>
 
   <!-- 2. Point the module at a model. Replace this with a real model archive URL
        (see the guide). Leaving it as-is will show a friendly "voice unavailable". -->
   <script>
     window.FS_VOICE_CONFIG = {
       enabled: true,
-      // TODO: set this to a vosk-browser-compatible .tar.gz model (see OFFLINE_VOICE.md)
-      modelUrl: 'MODEL_URL_HERE',
+      // model.tar.gz sits next to this page (see below)
+      modelUrl: 'model.tar.gz',
       selector: 'textarea',
       mode: 'append'
     };

@@ -69,7 +69,8 @@ This confirms the concept on your device before you integrate anything.
 For the demo, `voice.js` loads the Vosk library from a CDN, which needs internet.
 For a field build, download the library and serve it yourself:
 
-1. Get `vosk-browser.js` (and the `.wasm` next to it) from
+1. Get `vosk.js` (the file at `dist/vosk.js` in the `vosk-browser` package, plus
+   the `.wasm`/worker files it loads) from
    `https://www.npmjs.com/package/vosk-browser` (or the same jsDelivr URL used in
    `demo.html`, saved to disk).
 2. Put those files next to `voice.js` on your site.
@@ -84,7 +85,7 @@ Only do this in **your own copy** of FieldScribe (a fork or a private build) -
 not the shared app. Just before `</body>` in `index.html`, add:
 
 ```html
-<script src="vosk-browser.js"></script>            <!-- the library -->
+<script src="vosk.js"></script>                    <!-- the library -->
 <script>
   window.FS_VOICE_CONFIG = {
     enabled: true,
