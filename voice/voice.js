@@ -93,6 +93,8 @@
     }
 
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    // iOS/Safari often starts the AudioContext suspended; resume within the tap gesture.
+    try { if (audioCtx.state === 'suspended' && audioCtx.resume) audioCtx.resume(); } catch (e) {}
     recognizer = new model.KaldiRecognizer(audioCtx.sampleRate);
 
     recognizer.on('result', function (m) {
